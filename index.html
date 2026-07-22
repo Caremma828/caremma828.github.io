@@ -1019,38 +1019,7 @@ function startApp(){
   syncMessages();
 }
 
-// ═══ ⚠️ ACCÈS TEST — À SUPPRIMER AVANT MISE EN PRODUCTION ═══
-function testAccess(){
-  var today=new Date();
-  function dstr(daysAgo){var d=new Date(today);d.setDate(d.getDate()-daysAgo);return d.toLocaleDateString('fr-FR');}
-  CLIENT={
-    email:'test@caremma-finance.com',prenom:'Client',nom:'Test',
-    parcoursData:{},
-    docs:[
-      {id:'d1',nom:'Convention RTO — Compte-titres',date:dstr(3),cat:'Convention',status:'pending'},
-      {id:'d2',nom:'Déclaration d\'adéquation MIF2',date:dstr(20),cat:'Réglementaire',status:'signed',signatureDate:dstr(19)}
-    ],
-    rapports:[
-      {id:'r1',nom:'Reporting T2 2026',date:dstr(6),cat:'reporting',type:'pdf',taille:'2.4 Mo',url:'#'},
-      {id:'r2',nom:'Reporting T1 2026',date:dstr(97),cat:'reporting',type:'pdf',taille:'2.2 Mo',url:'#'},
-      {id:'r3',nom:'DER — Document d\'Entrée en Relation',date:dstr(210),cat:'reglementaire',type:'pdf',taille:'340 Ko',url:'#'},
-      {id:'r4',nom:'Convention de gestion conseillée',date:dstr(210),cat:'convention',type:'pdf',taille:'180 Ko',url:'#'}
-    ],
-    rapportsVus:['r2','r3','r4'],
-    msgs:[
-      {id:1,from:'conseiller',text:'Bonjour, votre reporting T2 2026 est disponible dans l\'espace Rapports.',date:dstr(6)+' 09:14',read:true},
-      {id:2,from:'client',text:'Merci Marc, je regarde ça.',date:dstr(6)+' 11:02',read:true}
-    ],
-    patrimoine:{},
-    ptfHistory:[
-      {date:dstr(180),valeur:238000},{date:dstr(120),valeur:245500},
-      {date:dstr(60),valeur:251200},{date:dstr(0),valeur:262800}
-    ],
-    profil:'Équilibré'
-  };
-  startApp();
-  toast('Mode test activé — données fictives','warn');
-}
+
 function goPage(name,navEl){
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
@@ -2626,14 +2595,7 @@ async function sendEmailJS(serviceId, templateId, params){
       onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" id="login-btn" onclick="doLogin()">Accéder à mon espace →</button>
     <div class="login-foot">Pas encore de compte ? Contactez votre conseiller.</div>
-    <!-- ⚠️ ACCÈS TEST — À SUPPRIMER AVANT MISE EN PRODUCTION -->
-    <div style="margin-top:18px;padding-top:16px;border-top:1px dashed var(--bdr)">
-      <button type="button" class="login-btn" onclick="testAccess()"
-        style="background:transparent;border:1px dashed var(--bdr-gold);color:var(--gold2);box-shadow:none">
-        🧪 Accès test (sans code)
-      </button>
-      <div class="login-foot" style="margin-top:8px;color:var(--text3);opacity:0.8">Phase de test uniquement — à retirer avant la mise en ligne</div>
-    </div>
+  </div>
   </div>
 </div>
 
