@@ -1371,6 +1371,8 @@ function renderStories(){
 // ═══ MESSAGES ═══
 function syncMessages(){
   var k=eKey(CLIENT.email);
+  // Filet de sécurité : normalise tout document déjà chargé (localStorage) avec l'ancien statut
+  if(CLIENT.docs){ CLIENT.docs.forEach(function(d){ if(d.status==='to_sign') d.status='pending'; }); }
   Promise.all([jbGet(MSG_BIN).catch(function(){return null;}),fetchPublications()]).then(function(res){
     var data=res[0]||{};
     var pubs=res[1]||[];
@@ -1411,6 +1413,10 @@ function syncMessages(){
       remoteDocs.forEach(function(d){
         if(!docIds.has(String(d.id))){
           if(!CLIENT.docs)CLIENT.docs=[];
+          // Le CRM écrit le statut "to_sign" pour un document en attente de signature ;
+          // le portail attend "pending" pour afficher le bouton Signer. On normalise ici
+          // une bonne fois, pour que tous les documents (nouveaux et existants) s'ouvrent.
+          if(d.status==='to_sign') d.status='pending';
           CLIENT.docs.push(d);
           docIds.add(String(d.id));
         }
