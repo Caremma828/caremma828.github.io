@@ -1553,6 +1553,8 @@ function openDocSig(docId){
       +(previewBtn?'<div style="margin-left:auto">'+previewBtn+'</div>':'')
     +'</div>'
     +'<div style="font-size:11px;color:var(--text3);margin-bottom:10px;padding:8px 10px;background:rgba(201,168,76,.06);border-radius:6px;border-left:2px solid var(--gold)">Tracez votre signature dans la zone ci-dessous, puis cliquez "Valider". Le document signé vous sera téléchargeable et sera automatiquement envoyé à votre conseiller.</div>'
+    +'<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Fait à</label>'
+    +'<input type="text" id="sig-lieu" placeholder="Ville depuis laquelle vous signez" style="width:100%;padding:8px 10px;border:1.5px solid var(--bdr-gold);border-radius:6px;font-size:13px;font-family:inherit;background:var(--bg)"></div>'
     +'<canvas id="sig-canvas" width="600" height="140" style="width:100%;height:140px;cursor:crosshair;background:white;border-radius:6px;border:1.5px solid var(--bdr-gold);display:block"></canvas>'
     +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
       +'<button onclick="clearSig()" class="btn btn-outline btn-sm">🗑 Effacer</button>'
@@ -2938,7 +2940,7 @@ function closeSig(){var z=document.getElementById('sig-zone');if(z)z.style.displ
 // ═══ Génération d'un vrai PDF signé (Caremma stylé) + envoi en morceaux vers JSONBin ═══
 // Le CRM (bouton "⬇ PDF signé") s'attend à trouver doc.pdfChunks : un tableau d'ID de bins
 // JSONBin, chacun contenant un morceau du PDF encodé en base64 (limite ~100 Ko par bin).
-async function generateAndUploadSignedPdf(signedDoc, sigData, sigDate){
+async function generateAndUploadSignedPdf(signedDoc, sigData, sigDate, sigLieu){
   if(typeof jspdf==='undefined'){
     console.warn('jsPDF non chargé — PDF signé non généré automatiquement.');
     return;
@@ -3078,24 +3080,25 @@ async function generateAndUploadSignedPdf(signedDoc, sigData, sigDate){
       y+=6;
     }
     function drawSignatureBanner(){
-      var bannerH=90;
+      var bannerH=sigLieu?100:90;
       ensureSpace(bannerH+10);
       pdf.setDrawColor(GOLD[0],GOLD[1],GOLD[2]); pdf.setFillColor(CREAM[0],CREAM[1],CREAM[2]);
       pdf.roundedRect(marginX, y, pageW-2*marginX, bannerH, 4, 4, 'FD');
       pdf.setFont('times','bold'); pdf.setFontSize(11); pdf.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
       pdf.text('Document signé électroniquement', marginX+12, y+20);
       pdf.setFont('times','normal'); pdf.setFontSize(9); pdf.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
-      pdf.text('Signé par '+(CLIENT.prenom+' '+CLIENT.nom)+' le '+sigDate, marginX+12, y+36);
-      try{ pdf.addImage(sigData,'PNG', marginX+12, y+44, 130, 38); }catch(_imgErr){}
+      var sigLine='Signé par '+(CLIENT.prenom+' '+CLIENT.nom)+(sigLieu?' à '+sigLieu:'')+' le '+sigDate;
+      pdf.text(sigLine, marginX+12, y+36);
+      try{ pdf.addImage(sigData,'PNG', marginX+12, y+(sigLieu?52:44), 130, 38); }catch(_imgErr){}
       y+=bannerH+14;
     }
 
     drawHeader();
-    drawSignatureBanner();
     sections.forEach(function(sec){
       drawSectionTitle(sec.title);
       sec.rows.forEach(function(r){ drawRow(r.label, r.value); });
     });
+    drawSignatureBanner();
 
     var totalPages=pdf.internal.getNumberOfPages();
     for(var p=1;p<=totalPages;p++){ pdf.setPage(p); drawFooter(p,totalPages); }
@@ -3146,8 +3149,9 @@ function confirmSig(){
   if(!ok){toast('Veuillez tracer votre signature','error');return;}
   var sigData=canvas.toDataURL('image/png');
   var sigDate=new Date().toLocaleString('fr-FR');
+  var sigLieu=(document.getElementById('sig-lieu')||{}).value||'';
   var signedDoc=_sigDoc; // keep reference before closeSig clears _sigDoc
-  _sigDoc.signature=sigData;_sigDoc.signatureDate=sigDate;_sigDoc.status='signed';
+  _sigDoc.signature=sigData;_sigDoc.signatureDate=sigDate;_sigDoc.signatureLieu=sigLieu;_sigDoc.status='signed';
   saveLocal();renderDocs();closeSig();
   toast('✅ Document signé — ouverture du récapitulatif...','success');
 
@@ -3171,7 +3175,7 @@ function confirmSig(){
   }).catch(function(){});
 
   // ── Générer le vrai PDF signé (Caremma stylé, correctement typé) et l'envoyer en morceaux vers JSONBin
-  generateAndUploadSignedPdf(signedDoc, sigData, sigDate).then(function(){
+  generateAndUploadSignedPdf(signedDoc, sigData, sigDate, sigLieu).then(function(){
     toast('✅ Document signé et transmis à votre conseiller','success');
   }).catch(function(){
     toast('Document signé — la génération du PDF a rencontré un souci, votre conseiller a été notifié.','');
