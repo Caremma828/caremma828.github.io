@@ -2963,8 +2963,8 @@ async function generateAndUploadSignedPdf(signedDoc, sigData, sigDate){
     function newSection(title){ currentSection={title:title||'', rows:[]}; sections.push(currentSection); }
     function pushRow(label, value){
       if(!currentSection) newSection('');
-      var v=(value||'').replace(/\s+/g,' ').trim();
-      var l=(label||'').replace(/\s+/g,' ').trim();
+      var v=(value||'').replace(/\s+/g,' ').replace(/☐/g,'[ ]').replace(/☒/g,'[x]').trim();
+      var l=(label||'').replace(/\s+/g,' ').replace(/☐/g,'[ ]').replace(/☒/g,'[x]').trim();
       if(l||v) currentSection.rows.push({label:l, value:v||'—'});
     }
     function walk(el){
@@ -2989,6 +2989,14 @@ async function generateAndUploadSignedPdf(signedDoc, sigData, sigDate){
         if(child.tagName==='P'){
           var t=child.textContent;
           if(t && t.replace(/\s+/g,'').length) pushRow('', t);
+          continue;
+        }
+        // Div "feuille" sans classe reconnue et sans enfant élément (ex : lignes de cases à
+        // cocher écrites en texte libre) : capturer son texte directement, sinon il était
+        // silencieusement perdu (cause du contenu manquant dans le PDF final signé).
+        if(child.children.length===0){
+          var t2=child.textContent;
+          if(t2 && t2.replace(/\s+/g,'').length) pushRow('', t2);
           continue;
         }
         // Conteneur générique (.sec, .grid, .grid-1, ou div sans classe reconnue) : on descend dedans
