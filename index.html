@@ -1142,6 +1142,7 @@ function goPage(name,navEl){
     if(pframe && !pframe.dataset.loaded){ pframe.src='data:text/html;base64,'+_PARCOURS_TOOL_B64; pframe.dataset.loaded='1'; }
   }
   if(name==='documents')renderDocs();
+  if(name==='mesdocuments')renderMesDocuments();
   if(name==='rapports'){renderRapports();renderNotes();}
   if(name==='patrimoine'){renderGoalCard();renderPatrimoineDeclare();}
   if(name==='guides'){renderFiches();initSimAV();initSimPER();}
@@ -1423,12 +1424,12 @@ function syncMessages(){
 // ═══ DOCUMENTS ═══
 function renderDocs(){
   var el=document.getElementById('docs-list');if(!el)return;
-  var docs=CLIENT.docs||[];
+  var docs=(CLIENT.docs||[]).filter(function(d){ return d.status!=='signed'; });
   if(!docs.length){
     el.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3)">'
       +'<div style="font-size:36px;margin-bottom:12px">📂</div>'
-      +'<div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:6px">Aucun document pour le moment</div>'
-      +'<div style="font-size:12px;line-height:1.6">Votre conseiller vous enverra des documents à signer depuis le CRM.</div>'
+      +'<div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:6px">Aucun document en attente</div>'
+      +'<div style="font-size:12px;line-height:1.6">Votre conseiller vous enverra des documents à signer depuis le CRM. Vos documents déjà signés se trouvent dans « Mes documents ».</div>'
       +'</div>';
     return;
   }
@@ -1447,10 +1448,76 @@ function renderDocs(){
       +'<div style="flex-shrink:0;text-align:right">'
         +'<div style="font-size:11px;font-weight:600;color:'+(statusColor[d.status]||statusColor[''])+';margin-bottom:6px">'+(statusLabel[d.status]||'')+'</div>'
         +(d.status==='pending'?'<button onclick="openDocSig(\''+escH(d.id)+'\')" class="btn btn-gold btn-sm" style="font-size:11px;padding:5px 12px">✍️ Signer</button>':'')
-        +(signed&&d.signatureDate?'<div style="font-size:10px;color:var(--text3);margin-top:3px">le '+escH(d.signatureDate)+'</div>':'')
       +'</div>'
       +'</div>';
   }).join('');
+}
+
+function renderMesDocuments(){
+  var el=document.getElementById('mesdocs-list'); if(!el) return;
+  var docs=(CLIENT.docs||[]).filter(function(d){ return d.status==='signed'; });
+  if(!docs.length){
+    el.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3)">'
+      +'<div style="font-size:36px;margin-bottom:12px">🗂️</div>'
+      +'<div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:6px">Aucun document signé pour le moment</div>'
+      +'<div style="font-size:12px;line-height:1.6">Une fois vos documents signés depuis « Documents à signer », ils apparaîtront ici.</div>'
+      +'</div>';
+    return;
+  }
+  el.innerHTML=docs.map(function(d){
+    return '<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);'
+      +'border:1.5px solid rgba(34,197,94,.3);border-radius:10px;margin-bottom:10px">'
+      +'<div style="font-size:26px;flex-shrink:0">✅</div>'
+      +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:13px;font-weight:600;color:var(--text1);margin-bottom:2px">'+escH(d.nom)+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">Signé le '+escH(d.signatureDate||d.date||'')+'</div>'
+      +'</div>'
+      +'<button onclick="clientDownloadSignedPdf(\''+escH(d.id)+'\')" class="btn btn-outline btn-sm" style="font-size:11px" id="dl-btn-'+escH(d.id)+'">⬇ Télécharger le PDF</button>'
+      +'</div>';
+  }).join('');
+}
+
+// Reconstitue le PDF signé à partir des morceaux stockés dans JSONBin (même mécanisme que côté CRM)
+async function clientDownloadSignedPdf(docId){
+  var doc=(CLIENT.docs||[]).find(function(d){return String(d.id)===String(docId);});
+  if(!doc){toast('Document introuvable','error');return;}
+  var btn=document.getElementById('dl-btn-'+docId);
+  var chunks=doc.pdfChunks;
+  if(!chunks || !chunks.length){
+    // Filet de sécurité : essayer de relire depuis JSONBin au cas où généré sur un autre appareil
+    try{
+      var d2=await jbGet(MSG_BIN);
+      var k=eKey(CLIENT.email);
+      var fr=d2.messages && d2.messages[k] && (d2.messages[k].docs||[]).find(function(x){return String(x.id)===String(docId);});
+      if(fr && fr.pdfChunks && fr.pdfChunks.length){ chunks=fr.pdfChunks; doc.pdfName=fr.pdfName||doc.pdfName; }
+    }catch(_e){}
+  }
+  if(!chunks || !chunks.length){ toast('PDF non disponible pour le moment — réessayez dans quelques instants.','error'); return; }
+  if(btn){ btn.disabled=true; btn.textContent='Récupération…'; }
+  try{
+    var parts=[];
+    for(var i=0;i<chunks.length;i++){
+      var j=null;
+      for(var att=0; att<6; att++){
+        try{ j=await jbGet(chunks[i]); break; }
+        catch(e){ await new Promise(function(r){ setTimeout(r, 700*(att+1)); }); }
+      }
+      if(!j){ toast('Limite JSONBin atteinte — patientez ~30 s puis réessayez.','error'); if(btn){btn.disabled=false;btn.textContent='⬇ Télécharger le PDF';} return; }
+      parts.push({i:(j&&j.i!=null?j.i:i), c:(j&&j.c)||''});
+      if(btn) btn.textContent='Récupération ('+(i+1)+'/'+chunks.length+')…';
+    }
+    parts.sort(function(a,b){return a.i-b.i;});
+    var b64=parts.map(function(p){return p.c;}).join('');
+    if(!b64){ toast('PDF vide ou expiré','error'); if(btn){btn.disabled=false;btn.textContent='⬇ Télécharger le PDF';} return; }
+    var bin=atob(b64); var n=bin.length; var u8=new Uint8Array(n); while(n--){u8[n]=bin.charCodeAt(n);}
+    var blob=new Blob([u8],{type:'application/pdf'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a'); a.href=url; a.download=doc.pdfName||((doc.nom||'document')+'.pdf');
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ try{URL.revokeObjectURL(url);}catch(_){} }, 8000);
+    toast('PDF téléchargé ✓','success');
+  }catch(e){ toast('Erreur : '+e.message,'error'); }
+  if(btn){ btn.disabled=false; btn.textContent='⬇ Télécharger le PDF'; }
 }
 
 function openDocSig(docId){
@@ -3499,12 +3566,13 @@ async function sendEmailJS(serviceId, templateId, params){
       <div class="nav-item active" id="nav-accueil" onclick="goPage('accueil',this)"><span class="nav-icon">🏠</span>Tableau de bord</div>
       <div class="sb-section">Mon portefeuille</div>
       <div class="nav-item" id="nav-reporting" onclick="goPage('reporting',this)"><span class="nav-icon">📈</span>Performance & valorisation</div>
-      <div class="nav-item" id="nav-rapports" onclick="goPage('rapports',this)"><span class="nav-icon">📚</span>Rapports de gestion <span id="rap-badge" style="display:none;background:var(--gold);color:var(--navy);font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px"></span></div>
+      <div class="nav-item" id="nav-rapports" onclick="goPage('rapports',this)"><span class="nav-icon">📚</span>Publications <span id="rap-badge" style="display:none;background:var(--gold);color:var(--navy);font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px"></span></div>
       <div class="nav-item" id="nav-patrimoine" onclick="goPage('patrimoine',this)"><span class="nav-icon">🏛️</span>Mon patrimoine</div>
       <div class="nav-item" id="nav-guides" onclick="goPage('guides',this)"><span class="nav-icon">📖</span>Guides & simulateurs</div>
       <div class="sb-section">Documents & échanges</div>
       <div class="nav-item" id="nav-monprofil" onclick="goPage('monprofil',this)"><span class="nav-icon">📝</span>Mon profil</div>
       <div class="nav-item" id="nav-documents" onclick="goPage('documents',this)"><span class="nav-icon">✍️</span>Documents à signer <span id="doc-badge" style="display:none;background:var(--gold);color:var(--navy);font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px"></span></div>
+      <div class="nav-item" id="nav-mesdocuments" onclick="goPage('mesdocuments',this)"><span class="nav-icon">🗂️</span>Mes documents</div>
       <div class="nav-item" id="nav-messages" onclick="goPage('messages',this)"><span class="nav-icon">💬</span>Messagerie<span class="nav-badge" id="msg-badge" style="display:none">0</span></div>
     </div>
 
@@ -3645,9 +3713,15 @@ async function sendEmailJS(serviceId, templateId, params){
         </div>
       </div>
 
+      <!-- MES DOCUMENTS (signés) -->
+      <div class="page" id="pg-mesdocuments">
+        <div class="ph"><div class="pt">Mes documents</div><div class="ps">Retrouvez ici tous vos documents déjà signés</div></div>
+        <div id="mesdocs-list"></div>
+      </div>
+
       <!-- RAPPORTS -->
       <div class="page" id="pg-rapports">
-        <div class="ph"><div class="pt">Rapports de gestion</div><div class="ps">Consultez et téléchargez vos rapports de gestion, relevés et documents contractuels</div></div>
+        <div class="ph"><div class="pt">Publications</div><div class="ps">Consultez et téléchargez vos rapports de gestion, relevés et documents contractuels</div></div>
         <div id="notes-list"></div>
         <div class="card" style="padding:16px 22px">
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
